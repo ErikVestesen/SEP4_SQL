@@ -1,6 +1,7 @@
 use sep4
 go
 
+DROP TABLE DW_Temp_Fact_Data
 DROP TABLE DW_Changed_Sensor;
 DROP TABLE DW_Changed_Winecellar;
 DROP TABLE DW_Changed_Measurement;
@@ -24,7 +25,6 @@ SensorName NVARCHAR(50),
 RoomLocation NVARCHAR(50), 
 WineCellarID INT
 );
-
 
 ---Last updated variables
 DECLARE @lastUpdated Date = (Select Last_updated from DW_update) --31/12/1997
@@ -210,6 +210,90 @@ FROM DW_Changed_Winecellar)
 INSERT INTO DW_D_WineCellar(WineCellarID,CellarName, validFrom, validTo)
 SELECT WineCellarID,CellarName, @lastUpdatedPlusOne, @endDate FROM DW_Changed_Winecellar
 
+--Create Temp fact table
+CREATE TABLE DW_Temp_Fact_Data (
+D_ID INT NULL,
+S_ID INT NULL,
+W_ID INT NULL,
+M_ID INT NULL,
+MeasureID int NULL,
+SensorID int NULL,
+WineCellarID int NULL,
+InsertedDate DATETIME NULL,
+DailyAverageCO2 DECIMAL(18,2) NULL,
+DailyAverageTemperature DECIMAL(18,2) NULL,
+DailyAverageHumidity DECIMAL(18,2) NULL
+)
+
+--Insert business keys
+INSERT INTO DW_Temp_Fact_Data 
+(MeasureID, SensorID, WineCellarID, InsertedDate)
+SELECT
+M.M_ID, S.SensorID, W.WinecellarID, M.Date_Inserted
+From SEP4.dbo.Sensor S
+JOIN SEP4.dbo.WineCellar W on W.WinecellarID = S.WinecellarID
+JOIN SEP4.dbo.Measurement M on M.SensorID = S.SensorID
+WHERE M.Date_Inserted > (select max(Last_updated) from DW_Update)
+
+--Look up surrogate keys
+UPDATE DW_Temp_Fact_Data
+SET M_ID = (
+select m.M_ID from DW_D_Measurement m
+where m.MeasureID = DW_Temp_Fact_Data.MeasureID
+AND m.validTo = '2099-01-01'
+)
+
+--Update metrics
+Update 
+	DW_Temp_Fact_Data 
+Set 
+	DailyAverageCO2 = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'CO2'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_Temp_Fact_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	),
+	DailyAverageTemperature = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'Temperature'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_Temp_Fact_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	),
+	DailyAverageHumidity = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'Humidity'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_Temp_Fact_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	)
+
+--Populate DW fact table 
 
 
 select * from DW_D_Measurement order by MeasureTimestamp desc
