@@ -1,14 +1,5 @@
 USE sep4
 go
---TODO (for initial load):
-
---discuss fact table values... only got ids right now
-
---Update calendar surrogate key, missing an ID
---Fill data warehouse fact
-
---Entire incremential load stuff, not now plz
-
 -----------------------
 ---Create Dimensions---
 -----------------------
@@ -241,3 +232,55 @@ SET D_ID = (
 INSERT INTO DW_F_Data(S_ID, W_ID, M_ID, D_ID)
 SELECT S_ID, W_ID, M_ID, D_ID 
 FROM Stage_Fact_Data
+
+---------------------
+---Update DW facts---
+---------------------
+Update 
+	DW_F_Data 
+Set 
+	DailyAverageCO2 = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'CO2'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_F_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	),
+	DailyAverageTemperature = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'Temperature'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_F_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	),
+	DailyAverageHumidity = (
+		SELECT DISTINCT a.Average FROM 
+		(
+			Select AVG(DataValue) as Average, 
+			CONVERT(date, MeasureTimestamp) as dateTimestamp
+			from DW_D_Measurement where SensorID in 
+			(   
+				Select SensorID from DW_D_Sensor where WineCellarID = 1 
+			)   
+			and DataName  = 'Humidity'
+			GROUP BY CONVERT(date, MeasureTimestamp) 
+		) a, DW_D_Measurement m
+		WHERE m.M_ID = DW_F_Data.M_ID
+		AND CONVERT(date, m.MeasureTimestamp) = a.dateTimestamp
+	)

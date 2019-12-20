@@ -30,11 +30,9 @@ DECLARE @lastUpdated Date = (Select Last_updated from DW_update) --31/12/1997
 DECLARE @lastUpdatedPlusOne Date = DATEADD(day,1,(Select Last_updated from DW_update)) -- 01/01/1998
 DECLARE @endDate Date = '2099/01/01' 
 
-
 ------------
 ---Sensor---
 ------------
-
 --Insert added sensors
 INSERT INTO sep4.dbo.DW_D_Sensor(SensorID,SensorName,RoomLocation,WineCellarID, validFrom, validTo)
 Select SensorID,SensorName,RoomLocation,WineCellarID, @lastUpdatedPlusOne, @endDate from sep4.dbo.Sensor
@@ -60,7 +58,7 @@ WHERE SensorID in
 	( --Today
 	SELECT SensorID FROM sep4.dbo.Sensor
 	)
-)
+)  And validTo = @endDate
 
 --Insert and update changed Sensors
 INSERT INTO DW_Changed_Sensor (SensorID,SensorName,RoomLocation,WineCellarID)
@@ -88,15 +86,12 @@ FROM DW_Changed_Sensor)
 
 --Insert new row in dimension table
 INSERT INTO DW_D_Sensor(SensorID,SensorName,RoomLocation,WineCellarID, validFrom, validTo)
-SELECT SensorID,SensorName,RoomLocation,WineCellarID, @lastUpdatedPlusOne, @endDate 
+SELECT SensorID,SensorName,RoomLocation,WineCellarID, @lastUpdated, @endDate 
 FROM DW_Changed_Sensor
 
 -----------------
 ---Measurement---
 -----------------
----Test
---Insert into Measurement(Date_Inserted, DataType, DataValue)VALUES (GETDATE(), 'CO2', 123)
-
 --Insert added measurement
 INSERT INTO sep4.dbo.DW_D_Measurement(MeasureID,DataName,DataValue,MeasureTimestamp,SensorID, validFrom, validTo)
 Select M_ID,DataType,DataValue,Date_Inserted,SensorID, @lastUpdatedPlusOne, @endDate from sep4.dbo.Measurement
@@ -120,9 +115,10 @@ WHERE MeasureID in
 	)
 	EXCEPT
 	( --Today
-	SELECT MeasureID FROM sep4.dbo.Measurement
+	SELECT m.M_ID FROM sep4.dbo.Measurement m
 	)
-)
+)  And validTo = @endDate
+
 
 --Insert and update changed Measurements
 INSERT INTO DW_Changed_Measurement(MeasureID,DataName,DataValue,MeasureTimestamp,SensorID)
@@ -149,12 +145,11 @@ WHERE MeasureID in
 FROM DW_Changed_Measurement)
 --Insert new row in dimension table
 INSERT INTO DW_D_Measurement(MeasureID,DataName,DataValue,MeasureTimestamp,SensorID, validFrom, validTo)
-SELECT MeasureID,DataName,DataValue,MeasureTimestamp,SensorID, @lastUpdatedPlusOne, @endDate FROM DW_Changed_Measurement
+SELECT MeasureID,DataName,DataValue,MeasureTimestamp,SensorID, @lastUpdated, @endDate FROM DW_Changed_Measurement
 
 ----------------
 ---Winecellar---
 ----------------
-
 --Insert added winecellar
 INSERT INTO sep4.dbo.DW_D_WineCellar(WineCellarID,CellarName, validFrom, validTo)
 Select WineCellarID,CellarName, @lastUpdatedPlusOne, @endDate from sep4.dbo.WineCellar
@@ -180,7 +175,7 @@ WHERE WineCellarID in
 	( --Today
 	SELECT WineCellarID FROM sep4.dbo.WineCellar
 	)
-)
+)  And validTo = @endDate
 
 --Insert and update changed Winecellers
 INSERT INTO DW_Changed_Winecellar(WineCellarID,CellarName)
@@ -207,6 +202,4 @@ WHERE WineCellarID in
 FROM DW_Changed_Winecellar)
 --Insert new row in dimension table
 INSERT INTO DW_D_WineCellar(WineCellarID,CellarName, validFrom, validTo)
-SELECT WineCellarID,CellarName, @lastUpdatedPlusOne, @endDate FROM DW_Changed_Winecellar
-
---select * from DW_D_Measurement order by MeasureTimestamp desc
+SELECT WineCellarID,CellarName, @lastUpdated, @endDate FROM DW_Changed_Winecellar
